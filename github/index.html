@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>群組導航</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            /* 設定預設變數，以防不在 Telegram 環境中開啟 */
+            --tg-theme-bg-color: #f5f5f5;
+            --tg-theme-text-color: #000000;
+            --tg-theme-hint-color: #999999;
+            --tg-theme-link-color: #2481cc;
+            --tg-theme-button-color: #3390ec;
+            --tg-theme-button-text-color: #ffffff;
+            --tg-theme-secondary-bg-color: #ffffff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color);
+            color: var(--tg-theme-text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px; /* 手機最佳寬度 */
+            padding: 24px 16px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            margin-bottom: 32px;
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+
+        p.subtitle {
+            margin-top: 8px;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color);
+        }
+
+        #button-list {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px; /* 按鈕間距 */
+        }
+
+        /* 現代化卡片按鈕樣式 */
+        .card-btn {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--tg-theme-secondary-bg-color);
+            padding: 18px 20px;
+            border-radius: 16px;
+            text-decoration: none;
+            color: var(--tg-theme-text-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            opacity: 0; /* 初始隱藏，用於動畫 */
+            transform: translateY(10px);
+            border: 1px solid transparent;
+        }
+
+        .card-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-color: rgba(0,0,0,0.05);
+        }
+
+        .card-btn:active {
+            transform: scale(0.98);
+            background-color: var(--tg-theme-bg-color);
+        }
+
+        .btn-text {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .btn-icon {
+            color: var(--tg-theme-hint-color);
+            font-size: 20px;
+        }
+
+        /* 載入動畫 (Spinner) */
+        .spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--tg-theme-button-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        /* 錯誤訊息樣式 */
+        .error-msg {
+            background-color: rgba(255, 59, 48, 0.1);
+            color: #ff3b30;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        /* 動畫定義 */
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUpFade { 
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            } 
+        }
+
+        /* 深色模式微調 */
+        @media (prefers-color-scheme: dark) {
+            .card-btn {
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            }
+            .spinner {
+                border-color: rgba(255, 255, 255, 0.1);
+                border-left-color: var(--tg-theme-button-color);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>哥布林防失聯入口</h1>
+            <p class="subtitle">點擊加入的群組或頻道</p>
+        </header>
+
+        <div id="loading" class="spinner"></div>
+        <div id="button-list"></div>
+    </div>
+
+    <script>
+        // 初始化 Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        if (tg) {
+            tg.ready();
+            tg.expand(); // 自動展開到全螢幕高度
+            
+            // 設置標題欄顏色以匹配背景
+            if (tg.setHeaderColor) {
+                tg.setHeaderColor(tg.themeParams.bg_color || '#ffffff');
+            }
+        }
+
+        async function loadData() {
+            const listContainer = document.getElementById('button-list');
+            const loadingSpinner = document.getElementById('loading');
+            
+            try {
+                // 添加時間戳防止快取
+                const response = await fetch('./data.json?t=' + new Date().getTime());
+                
+                if (!response.ok) throw new Error("無法讀取資料庫");
+                
+                const data = await response.json();
+                
+                // 隱藏載入動畫
+                loadingSpinner.style.display = 'none';
+
+                if (data.length === 0) {
+                    listContainer.innerHTML = '<p class="subtitle" style="text-align:center;">目前沒有可用的群組。</p>';
+                    return;
+                }
+
+                data.forEach((item, index) => {
+                    const a = document.createElement('a');
+                    a.href = item.link;
+                    a.className = 'card-btn';
+                    a.target = "_blank"; // 在新視窗/Telegram內部瀏覽器開啟
+                    
+                    // 延遲動畫，產生階梯式出現效果
+                    a.style.animation = `slideUpFade 0.4s ease forwards ${index * 0.1}s`;
+
+                    // 內部結構：文字 + 箭頭圖示
+                    a.innerHTML = `
+                        <span class="btn-text">${escapeHtml(item.description)}</span>
+                        <span class="btn-icon">›</span>
+                    `;
+                    
+                    // 點擊時觸發 Telegram 觸覺反饋
+                    a.addEventListener('click', () => {
+                        if (tg.HapticFeedback) {
+                            tg.HapticFeedback.impactOccurred('light');
+                        }
+                    });
+
+                    listContainer.appendChild(a);
+                });
+
+            } catch (error) {
+                console.error(error);
+                loadingSpinner.style.display = 'none';
+                listContainer.innerHTML = `
+                    <div class="error-msg">
+                        載入失敗，請檢查網絡連線。<br>
+                        <small onclick="location.reload()" style="cursor:pointer; text-decoration:underline; margin-top:8px; display:block;">點擊重試</small>
+                    </div>
+                `;
+            }
+        }
+
+        // 簡單的 HTML 轉義函數，防止 XSS
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        // 執行載入
+        loadData();
+    </script>
+</body>
+</html>
